@@ -8,6 +8,7 @@ from mmcv.runner import BaseModule
 from mmcv.utils import ConfigDict
 from mmdet.models.builder import MODELS
 from torch import Tensor
+from .transformers import CrossAttentionTransformerBlock
 
 # AGGREGATORS are used for aggregate features from different data
 # pipelines in meta-learning methods, such as attention rpn.
@@ -220,3 +221,112 @@ class DotProductAggregator(BaseModule):
             feat = self.norm(feat)
             feat = self.relu(feat)
         return feat
+
+
+@AGGREGATORS.register_module()
+class CrossAttentionAggregator(BaseModule):
+    """Cross-Attention Transformer aggregator. Based on https://arxiv.org/abs/2104.14984.
+
+    Args:
+        in_channels (int): Number of input features channels.
+        out_channels (int): Number of output features channels.
+            Default: None.  # TODO: delete?
+        num_layers (int): Number of CAT layers to use (N = 4 in the paper).
+        num_heads (int): Number of heads to use in each CAT layer (M = 8 in the
+            paper).
+        embed_size (int): Transformer sequence dimension.
+        forward_expansion (int): Factor of embed_size for the first FFN after
+            multi-head attention.
+        pos_encoding (bool): Either add sinusoidal positional encodings or not.
+        dropout_prob (float): Dropout ratio.
+        init_cfg (ConfigDict | None): Initialization config dict.
+            Default: None.
+
+    """
+    def __init__(self,
+                 in_channels: int,
+                 # out_channels: Optional[int] = None,
+                 num_layers: int,
+                 num_heads: int,
+                 embed_size: int,
+                 forward_expansion: int,
+                 pos_encoding: bool,
+                 dropout_prob: float = 0.,
+                 #with_fc: bool = False,
+                 init_cfg: Optional[ConfigDict] = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        assert in_channels is not None, \
+            "CrossAttentionAggregator require config of 'in_channels'."
+        self.in_channels = in_channels
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.embed_size = embed_size
+        self.forward_expansion = forward_expansion
+        self.pos_encoding = pos_encoding
+        self.dropout_prob = dropout_prob
+        self.cat_block = CrossAttentionTransformerBlock(in_channels=self.in_channels,
+                                                        num_layers=self.num_layers,
+                                                        num_heads=self.num_heads,
+                                                        embed_size=self.embed_size,
+                                                        forward_expansion=self.forward_expansion,
+                                                        pos_encoding=self.pos_encoding,
+                                                        dropout_prob=self.dropout_prob)
+
+    # TODO: x_query goes to RPN, but x_support should be used in RoI matching?
+    def forward(self, query_feat: Tensor, support_feat: Tensor) -> Tensor:
+        """Calculate aggregated features of query and support.
+
+        Args:
+            query_feat (Tensor): Input query features with shape (N, C, H_q, W_q).
+            support_feat (Tensor): Input support features with shape
+                (N, C, H_s, W_s).
+
+        Returns:
+            Tensor: When `with_fc` is True, the aggregate feature is with
+                shape (N, C), otherwise, its shape is (N, C, H_q, W_q).
+        """
+        '''
+        print("ENTERING CrossAttentionAggregator:")
+        print(f"num_layers = {self.num_layers}, num_heads = {self.num_heads}")
+        print(f"query_feat.size() = {query_feat.size()}")
+        print(f"support_feat.size() = {support_feat.size()}")
+        '''
+        assert query_feat.size(1) == support_feat.size(1), \
+            'mismatch channel number between query and support features.'
+        x_query = query_feat
+        x_support = support_feat
+        # print("Applying CrossAttentionTransformer...")
+        x_query, _ = self.cat_block(x_query, x_support)
+        '''
+        print("  Sizes after CAT Block...")
+        print(f"    x_query.size() = {x_query.size()}")
+        print(f"    x_support.size() = {x_support.size()}")
+        '''
+        return x_query
+
+
+@AGGREGATORS.register_module()
+class DummyAggregator(BaseModule):
+    """Dummy aggregator.
+
+    Args:
+        init_cfg (ConfigDict | None): Initialization config dict.
+            Default: None.
+    """
+
+    def __init__(self, init_cfg: Optional[ConfigDict] = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+
+    def forward(self, query_feat: Tensor, support_feat: Tensor) -> Tensor:
+        """It just returns the input query feature map (no aggregation at all).
+
+        Args:
+            query_feat (Tensor): Input query features with shape (N, C, H, W).
+            support_feat (Tensor): Input support features with shape
+                (N, C, H, W).
+
+        Returns:
+            Tensor: The same as the input query fetures.
+        """
+
+        return query_feat

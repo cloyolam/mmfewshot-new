@@ -62,7 +62,7 @@ class QuerySupportDetector(BaseDetector):
         # support neck only forward support data.
         self.support_neck = build_neck(
             support_neck) if support_neck is not None else None
-        assert roi_head is not None, 'missing config of roi_head'
+        # assert roi_head is not None, 'missing config of roi_head'
         # when rpn with aggregation neck, the input of rpn will consist of
         # query and support data. otherwise the input of rpn only
         # has query data.
@@ -170,6 +170,8 @@ class QuerySupportDetector(BaseDetector):
         elif mode == 'model_init':
             return self.forward_model_init(img, img_metas, **kwargs)
         elif mode == 'test':
+            # BaseDetector (mmdet/models/detectors/base.py)
+            # It calls to simple_test in the class that inherits from QuerySupportDetector
             return self.forward_test(img, img_metas, **kwargs)
         else:
             raise ValueError(
