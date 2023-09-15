@@ -1,6 +1,7 @@
 _base_ = [
     '../../../_base_/datasets/query_aware/base_voc.py',
-    '../../../_base_/schedules/schedule.py', '../../transformer-neck-rpn_wo-roi-head_r50_c4.py',
+    '../../../_base_/schedules/schedule.py',
+    '../../transformer-neck-rpn_wo-roi-head_r50_c4.py',
     '../../../_base_/default_runtime.py'
 ]
 # classes splits are predefined in FewShotVOCDataset
@@ -16,8 +17,8 @@ data = dict(
     test=dict(classes='BASE_CLASSES_SPLIT4'),
     model_init=dict(classes='BASE_CLASSES_SPLIT4'))
 optimizer = dict(
-    lr=0.004,
-    # lr = 0.0015,  # 3 * lr_default / 8
+    # lr=0.004,
+    lr = 0.0015,  # 3 * lr_default / 8
     momentum=0.9,
     paramwise_cfg=dict(custom_keys={'roi_head.bbox_head': dict(lr_mult=2.0)}))
 lr_config = dict(warmup_iters=500, warmup_ratio=0.1, step=[16000])
